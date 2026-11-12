@@ -1,12 +1,13 @@
 databases:
   - name: gleditech-db
     databaseName: gleditech
+    plan: 0.1c-256mb
     user: gleditech
 services:
   - type: web
     name: gleditech
     runtime: node
-    plan: starter
+    plan: 0.5c-512mb
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health

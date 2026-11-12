@@ -32,12 +32,12 @@ La función «Olvidé mi contraseña» informa que hay que contactar al administ
 1. En https://dashboard.render.com, pulsa **New > Blueprint** y conecta el repositorio.
 2. Render encontrará `render.yaml` y propondrá un servicio web Node.js y una base de datos PostgreSQL.
 3. Configura la variable secreta `ADMIN_PASSWORD` con una contraseña **única de al menos 12 caracteres**. No la escribas en el código.
-4. Revisa el plan y los posibles costos de Render antes de crear recursos. El archivo usa `starter` para el web service; los planes disponibles y los costos de la base varían.
+4. **Revisa los costos antes de crear los recursos.** El `render.yaml` usa planes pagados actuales de Render: `0.5c-512mb` para el servicio web y `0.1c-256mb` para PostgreSQL. Esto evita que la base de datos gratuita expire a los 30 días y que se pierdan los datos. Si solo quieres probar temporalmente, puedes cambiar ambos planes a `free`, pero la web se dormirá tras 15 minutos sin tráfico y la base gratuita expirará a los 30 días.
 5. Despliega y abre la URL HTTPS del servicio. La ruta `/health` permite validar la conexión.
 6. Accede con el usuario de `ADMIN_USER` (`admin` por defecto) y `ADMIN_PASSWORD`. Se solicitará cambiar la contraseña en el primer ingreso.
 7. Ve a **Usuarios y permisos > Nuevo usuario** para añadir empleados.
 
-**Para un servicio ya existente:** crea/conecta una base PostgreSQL persistente, define `DATABASE_URL`, `ADMIN_PASSWORD`, `ADMIN_USER`, `NODE_ENV=production` en Environment, configura Build Command `npm install`, Start Command `npm start`, Health Check Path `/health`.
+**Para un servicio ya existente:** crea/conecta una base PostgreSQL, define `DATABASE_URL`, `ADMIN_PASSWORD`, `ADMIN_USER`, `ADMIN_NAME` y `NODE_ENV=production` en Environment, configura Build Command `npm install`, Start Command `npm start` y Health Check Path `/health`. Asegúrate de que `DATABASE_URL` corresponda a la base PostgreSQL del mismo entorno.
 
 ## Gestión de cuentas
 - **Administrador:** gestiona usuarios y configuración, dispone de reportes y auditoría.
@@ -53,4 +53,4 @@ La función «Olvidé mi contraseña» informa que hay que contactar al administ
 5. Configurar copias de seguridad de PostgreSQL y probar restauración.
 6. Verificar cálculos y flujos operativos contra la aplicación original antes de utilizar documentos comerciales reales.
 
-> Esta versión se preparó y verificó sintácticamente, pero no se ejecutó contra una base PostgreSQL de Render desde este entorno. El despliegue y las pruebas de integración siguen siendo necesarios.
+> Se verificó la sintaxis de `server.js`, el JavaScript incluido en `public/index.html` y la estructura YAML de `render.yaml`. No fue posible ejecutar una instalación completa de dependencias ni conectarse a una base PostgreSQL de Render desde este entorno; el despliegue y las pruebas de integración deben confirmarse en Render.
