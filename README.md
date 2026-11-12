@@ -31,3 +31,7 @@ Esta versión contiene una migración que restablece **una sola vez** la cuenta 
 - La imagen de portada y la entrada ya no apuntan a un recurso ausente.
 - No se eliminan ni migran tablas o registros existentes. Se conservan las credenciales de la V4 y la obligación de cambiar la contraseña inicial.
 - Para actualizar: sustituir los archivos en GitHub, desplegar último commit en Render y recargar con Ctrl+F5.
+
+
+## V6 – Panel general
+Se corrige la incompatibilidad entre `/api/dashboard` y la interfaz: ahora el servidor devuelve `activity` desde la bitácora de auditoría, y el navegador tolera que esa propiedad falte o sea nula. Antes, `d.activity.slice(0,4)` podía producir `Cannot read properties of undefined (reading 'slice')`. No se borran datos ni se necesitan migraciones de tablas.
