@@ -26,6 +26,10 @@ if(['localhost','127.0.0.1','::1'].includes(databaseHost)){
  console.error('CONFIGURACIÓN INVÁLIDA: DATABASE_URL apunta a localhost. Render necesita la Internal Database URL de tu servicio PostgreSQL, no 127.0.0.1.');
  process.exit(1);
 }
+if(process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.length<12){
+ console.error('CONFIGURACIÓN INVÁLIDA: ADMIN_PASSWORD debe tener al menos 12 caracteres.');
+ process.exit(1);
+}
 const pool=new Pool({
  connectionString:databaseUrl,
  ssl:process.env.NODE_ENV==='production'?{rejectUnauthorized:false}:undefined,
@@ -42,7 +46,7 @@ app.set('trust proxy',1);
 app.use(helmet({contentSecurityPolicy:false}));
 app.use(express.json({limit:'5mb'}));
 app.use(cookieParser());
-const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:12*1024*1024}});
+const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024}});
 const query=(sql,values=[])=>pool.query(sql,values);
 const fault=(res,status,detail)=>res.status(status).json({detail});
 const safe=(fn)=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
@@ -62,7 +66,7 @@ async function init(){
   console.log('Cuenta administradora inicial creada. Cambio de contraseña requerido.');
  }
  const cfg=await query("SELECT 1 FROM records WHERE entity='company' LIMIT 1");
- if(!cfg.rowCount){let company={name:'GLEDITECH',ruc:'',address:'',phone:'',email:'',city:'Quito',terms:''};await putRecord('company',uuid(),company);}
+ if(!cfg.rowCount){const id=uuid();let company={id,name:'GLEDITECH',ruc:'',address:'',phone:'',email:'',city:'Quito',terms:''};await putRecord('company',id,company);}
 }
 async function getRecords(entity){const r=await query('SELECT data FROM records WHERE entity=$1',[entity]);return r.rows.map(x=>x.data)}
 async function getRecord(entity,id){const r=await query('SELECT data FROM records WHERE entity=$1 AND id=$2',[entity,id]);return r.rows[0]?.data}
@@ -83,7 +87,7 @@ app.get('/api/auth/me',auth,(req,res)=>res.json({user:publicUser(req.user),csrf:
 app.post('/api/auth/logout',auth,csrf,safe(async(req,res)=>{await query('DELETE FROM sessions WHERE id=$1',[req.sessionId]);res.clearCookie('gleditech_session',{path:'/'});await audit(req,'logout','auth');res.json({ok:true})}));
 app.get('/api/auth/sessions',auth,safe(async(req,res)=>{const r=await query('SELECT id,created_at,last_used FROM sessions WHERE user_id=$1 AND expires_at>now() ORDER BY last_used DESC',[req.user.id]);res.json(r.rows.map(s=>({...s,current:s.id===req.sessionId})))}));
 app.delete('/api/auth/sessions',auth,csrf,safe(async(req,res)=>{await query('DELETE FROM sessions WHERE user_id=$1 AND id<>$2',[req.user.id,req.sessionId]);res.json({ok:true})}));
-app.post('/api/auth/password',auth,csrf,safe(async(req,res)=>{const b=req.body;if(!passwordOk(b.new_password))return fault(res,400,'La contraseña requiere al menos 12 caracteres.');if(b.confirm_password&&b.confirm_password!==b.new_password)return fault(res,400,'Las contraseñas no coinciden.');if(!(await bcrypt.compare(String(b.current_password||''),req.user.password_hash)))return fault(res,400,'Contraseña actual incorrecta.');await query('UPDATE users SET password_hash=$1,must_change=false WHERE id=$2',[await bcrypt.hash(b.new_password,12),req.user.id]);await query('DELETE FROM sessions WHERE user_id=$1 AND id<>$2',[req.user.id,req.sessionId]);await audit(req,'change_password','users');res.json({ok:true,user:{...publicUser(req.user),must_change:false}})}));
+app.post('/api/auth/password',auth,csrf,safe(async(req,res)=>{const b=req.body;if(!passwordOk(b.new_password))return fault(res,400,'La contraseña requiere al menos 12 caracteres.');if(b.confirm_password&&b.confirm_password!==b.new_password)return fault(res,400,'Las contraseñas no coinciden.');if(!(await bcrypt.compare(String(b.current_password||''),req.user.password_hash)))return fault(res,400,'Contraseña actual incorrecta.');await query('UPDATE users SET password_hash=$1,must_change=false WHERE id=$2',[await bcrypt.hash(b.new_password,12),req.user.id]);await query('DELETE FROM sessions WHERE user_id=$1 AND id<>$2',[req.user.id,req.sessionId]);await audit(req,'change_password','users');res.json({ok:true,csrf:req.csrf,user:{...publicUser(req.user),must_change:false}})}));
 app.post('/api/auth/forgot',(req,res)=>res.json({message:'La recuperación automática por correo no está configurada. Solicita al administrador que te asigne una contraseña temporal.'}));
 app.post('/api/auth/reset',(req,res)=>fault(res,400,'La recuperación por correo no está configurada. Contacta a tu administrador.'));
 app.use('/api',auth,csrf,writable);
@@ -91,7 +95,7 @@ app.get('/api/users',admin,safe(async(req,res)=>{const r=await query('SELECT id,
 app.post('/api/users',admin,safe(async(req,res)=>{const b=req.body;if(!/^[\w.\-]{3,80}$/.test(b.username||''))return fault(res,400,'Usuario inválido.');if(!passwordOk(b.password))return fault(res,400,'Contraseña de al menos 12 caracteres requerida.');if(!['admin','technician'].includes(b.role))return fault(res,400,'Rol inválido.');const id=uuid();try{await query('INSERT INTO users(id,username,name,email,role,password_hash,active,must_change) VALUES($1,$2,$3,$4,$5,$6,$7,true)',[id,b.username,b.name||b.username,b.email||null,b.role,await bcrypt.hash(b.password,12),b.active!==false]);}catch(e){if(e.code==='23505')return fault(res,409,'Ese usuario ya existe.');throw e}await audit(req,'create','users',b.username);res.status(201).json({id,username:b.username})}));
 app.put('/api/users/:id',admin,safe(async(req,res)=>{const {id}=req.params,b=req.body;const u=await query('SELECT * FROM users WHERE id=$1',[id]);if(!u.rowCount)return fault(res,404,'Usuario no encontrado.');if(!['admin','technician'].includes(b.role))return fault(res,400,'Rol inválido.');if(id===req.user.id&&(b.role!=='admin'||b.active===false))return fault(res,400,'No puedes quitarte el acceso de administrador.');if(b.password&&!passwordOk(b.password))return fault(res,400,'La contraseña debe tener al menos 12 caracteres.');const active=b.active===true||b.active==='true';await query('UPDATE users SET name=$1,email=$2,role=$3,active=$4,password_hash=COALESCE($5,password_hash),must_change=CASE WHEN $5 IS NULL THEN must_change ELSE true END WHERE id=$6',[b.name,b.email||null,b.role,active,b.password?await bcrypt.hash(b.password,12):null,id]);if(!active||b.password)await query('DELETE FROM sessions WHERE user_id=$1 AND id<>$2',[id,req.sessionId]);await audit(req,'update','users',u.rows[0].username);res.json({ok:true})}));
 app.get('/api/company',safe(async(req,res)=>res.json((await getRecords('company'))[0]||{})));
-app.put('/api/company',admin,safe(async(req,res)=>{const old=(await getRecords('company'))[0]||{};const value={...old,...req.body};await putRecord('company',old.id||uuid(),value);await audit(req,'update','company');res.json(value)}));
+app.put('/api/company',admin,safe(async(req,res)=>{const old=(await getRecords('company'))[0]||{};const id=old.id||uuid();const value={...old,...req.body,id};await putRecord('company',id,value);await audit(req,'update','company');res.json(value)}));
 app.get('/api/system',admin,safe(async(req,res)=>res.json({database:'PostgreSQL',storage:'PostgreSQL persistente',smtp:false,production:isProduction,backup_hours:0,backup_keep:0,backups:[]})));
 app.get('/api/audit',admin,safe(async(req,res)=>{const offset=Math.max(0,Number(req.query.offset)||0),q=String(req.query.q||'');const r=await query('SELECT * FROM audit WHERE username ILIKE $1 OR action ILIKE $1 OR entity ILIKE $1 OR details ILIKE $1 ORDER BY id DESC LIMIT 100 OFFSET $2',['%'+q+'%',offset]);res.json(r.rows)}));
 app.get('/api/notifications',safe(async(req,res)=>res.json([])));
@@ -129,6 +133,6 @@ app.delete('/api/demo',admin,(req,res)=>fault(res,501,'El proyecto no carga regi
 app.use('/api',(req,res)=>fault(res,501,'Esta función requiere integración adicional del servidor.'));
 app.use(express.static(path.join(dir,'public')));
 app.get('*',(req,res)=>res.sendFile(path.join(dir,'public','index.html')));
-app.use((err,req,res,next)=>{console.error(err);if(err instanceof multer.MulterError)return fault(res,400,err.message);if(err.code==='22P02')return fault(res,400,'Identificador inválido.');if(err.code==='23505')return fault(res,409,'Ya existe un registro con ese valor.');return fault(res,500,'Error del servidor. Revisa los registros de Render.');});
+app.use((err,req,res,next)=>{console.error(err);if(err instanceof multer.MulterError)return fault(res,400,err.code==='LIMIT_FILE_SIZE'?'El archivo supera el límite de 20 MB.':err.message);if(err.code==='22P02')return fault(res,400,'Identificador inválido.');if(err.code==='23505')return fault(res,409,'Ya existe un registro con ese valor.');return fault(res,500,'Error del servidor. Revisa los registros de Render.');});
 const port=Number(process.env.PORT||3000);
 init().then(()=>app.listen(port,'0.0.0.0',()=>console.log('GLEDITECH escuchando en '+port))).catch(e=>{console.error('Error de inicio:',e);process.exit(1)});

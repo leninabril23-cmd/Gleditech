@@ -7,7 +7,7 @@ Conversión del archivo `GLEDITECH_Vista_Previa.html` a una aplicación Node.js/
 - Primer acceso: obligación de cambiar contraseña.
 - Roles `admin` y `technician`.
 - El administrador puede crear usuarios, cambiar roles, activar/desactivar cuentas y reiniciar contraseñas asignando una temporal nueva.
-- PostgreSQL persistente para cuentas, clientes, proyectos, precios, presupuestos/proformas, gastos, fotografías y documentos cargados (hasta 12 MB/archivo).
+- PostgreSQL persistente para cuentas, clientes, proyectos, precios, presupuestos/proformas, gastos, fotografías y documentos cargados (hasta 20 MB/archivo).
 - Auditoría básica de operaciones, panel, búsquedas y reportes básicos.
 
 ## Importante: funciones aún no integradas
@@ -104,3 +104,16 @@ git push
 ```
 
 **Nota sobre `error Command failed with exit code 1`:** esa línea es un resumen, no identifica por sí sola el fallo. El registro enviado muestra que Yarn terminó de resolver e instalar paquetes (`Done in 1.02s`); el error real debe estar después, normalmente durante `yarn start`. En este proyecto, verifica también que Render haya creado PostgreSQL y que el servicio web tenga `DATABASE_URL` vinculada a la base de datos, además de `ADMIN_PASSWORD` configurada con al menos 12 caracteres.
+
+
+## Correcciones de la versión V3 (12-11-2026)
+- Corregida la pérdida del token CSRF tras cambiar la contraseña inicial: ahora el backend devuelve `csrf` y la interfaz conserva el token. Esto evita errores 403 al crear o actualizar registros inmediatamente después del primer acceso.
+- Corregido el identificador persistente de la configuración de empresa: los cambios guardados ya no crean accidentalmente un nuevo registro cada vez en bases recién inicializadas.
+- Unificado el límite de subida de archivos a 20 MB entre la interfaz y el servidor, con un mensaje claro cuando se supera.
+- Validación temprana de `ADMIN_PASSWORD` si está configurada.
+- Actualizado el mensaje de conexión de la interfaz para instalaciones Node.js/Render (se eliminó la referencia incorrecta a Python).
+- Verificada la sintaxis JavaScript de servidor e interfaz con Node.js 22 y revisada la integridad del ZIP.
+
+**Alcance de las pruebas:** el entorno de preparación no pudo conectarse a `registry.npmjs.org` para instalar dependencias y tampoco dispone de tu base PostgreSQL. Por ello no se verificó un arranque completo ni pruebas de integración en Render. Los módulos pendientes de la sección anterior siguen pendientes; esta versión no los presenta como operativos.
+
+**Actualizar un Render ya existente:** reemplaza el contenido del repositorio y despliega el último commit. Si el servicio y la base ya existen, conserva sus variables y datos: no es necesario borrar PostgreSQL ni crear una base nueva. Verifica `DATABASE_URL` y que `ADMIN_PASSWORD` esté configurada correctamente durante la inicialización.
