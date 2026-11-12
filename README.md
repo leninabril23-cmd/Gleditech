@@ -79,3 +79,28 @@ Este error significa que la aplicación intenta conectarse a PostgreSQL en el pr
 - La base PostgreSQL y el servicio web deben estar en la misma región para usar la URL interna.
 - No publiques ni compartas el valor de `DATABASE_URL`, porque contiene credenciales.
 - El servidor ahora se detiene con un mensaje claro si `DATABASE_URL` falta o apunta a localhost.
+
+
+## Actualización de Multer
+
+Se actualizó `multer` de la rama 1.x a `^2.0.2` para evitar la advertencia de vulnerabilidades de la versión 1.x. La API utilizada por el proyecto (`memoryStorage` y límites de tamaño) sigue siendo compatible.
+
+Si el repositorio de GitHub contiene un `yarn.lock` antiguo, actualízalo desde la carpeta del proyecto antes de desplegar:
+
+```bash
+yarn upgrade multer@^2.0.2
+git add package.json yarn.lock
+git commit -m "Actualiza Multer a 2.x"
+git push
+```
+
+Si utilizas npm en lugar de Yarn:
+
+```bash
+npm install
+git add package.json package-lock.json
+git commit -m "Actualiza dependencias"
+git push
+```
+
+**Nota sobre `error Command failed with exit code 1`:** esa línea es un resumen, no identifica por sí sola el fallo. El registro enviado muestra que Yarn terminó de resolver e instalar paquetes (`Done in 1.02s`); el error real debe estar después, normalmente durante `yarn start`. En este proyecto, verifica también que Render haya creado PostgreSQL y que el servicio web tenga `DATABASE_URL` vinculada a la base de datos, además de `ADMIN_PASSWORD` configurada con al menos 12 caracteres.
