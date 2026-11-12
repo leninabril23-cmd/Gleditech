@@ -26,10 +26,6 @@ if(['localhost','127.0.0.1','::1'].includes(databaseHost)){
  console.error('CONFIGURACIÓN INVÁLIDA: DATABASE_URL apunta a localhost. Render necesita la Internal Database URL de tu servicio PostgreSQL, no 127.0.0.1.');
  process.exit(1);
 }
-if(process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.length<12){
- console.error('CONFIGURACIÓN INVÁLIDA: ADMIN_PASSWORD debe tener al menos 12 caracteres.');
- process.exit(1);
-}
 const pool=new Pool({
  connectionString:databaseUrl,
  ssl:process.env.NODE_ENV==='production'?{rejectUnauthorized:false}:undefined,
@@ -59,11 +55,31 @@ async function init(){
  CREATE TABLE IF NOT EXISTS audit(id bigserial PRIMARY KEY,created_at timestamptz DEFAULT now(),username text,action text,entity text,details text,ip text);
  CREATE TABLE IF NOT EXISTS blobs(id uuid PRIMARY KEY,content bytea NOT NULL,mime text NOT NULL,name text NOT NULL);
  CREATE TABLE IF NOT EXISTS password_resets(token_hash text PRIMARY KEY,user_id uuid REFERENCES users(id) ON DELETE CASCADE,expires_at timestamptz NOT NULL);`);
- const r=await query('SELECT COUNT(*)::int AS n FROM users');
- if(r.rows[0].n===0){const name=process.env.ADMIN_USER||'admin',password=process.env.ADMIN_PASSWORD;
-  if(!password||password.length<12)throw new Error('Define ADMIN_PASSWORD de al menos 12 caracteres antes de iniciar.');
-  await query('INSERT INTO users(id,username,name,role,password_hash,active,must_change) VALUES($1,$2,$3,$4,$5,true,true)',[uuid(),name,process.env.ADMIN_NAME||'Administrador','admin',await bcrypt.hash(password,12)]);
-  console.log('Cuenta administradora inicial creada. Cambio de contraseña requerido.');
+ // Acceso inicial solicitado: admin/admin. Se cambia obligatoriamente al entrar.
+ // La migración se ejecuta una sola vez, incluso si Render vuelve a iniciar el servicio.
+ const migrationId='00000000-0000-4000-8000-000000000004';
+ const migration=await query("SELECT 1 FROM records WHERE entity='system_migrations' AND id=$1",[migrationId]);
+ if(!migration.rowCount){
+  const client=await pool.connect();
+  try{
+   await client.query('BEGIN');
+   // Evita que dos instancias concurrentes apliquen la migración a la vez.
+   await client.query('SELECT pg_advisory_xact_lock(19573304)');
+   const done=await client.query("SELECT 1 FROM records WHERE entity='system_migrations' AND id=$1",[migrationId]);
+   if(!done.rowCount){
+    const existing=await client.query("SELECT id FROM users WHERE lower(username)='admin' LIMIT 1");
+    const initialHash=await bcrypt.hash('admin',12);
+    if(existing.rowCount){
+     await client.query("UPDATE users SET password_hash=$1,must_change=true,active=true,role='admin' WHERE id=$2",[initialHash,existing.rows[0].id]);
+     await client.query('DELETE FROM sessions WHERE user_id=$1',[existing.rows[0].id]);
+    }else{
+     await client.query('INSERT INTO users(id,username,name,role,password_hash,active,must_change) VALUES($1,$2,$3,$4,$5,true,true)',[uuid(),'admin','Administrador','admin',initialHash]);
+    }
+    await client.query('INSERT INTO records(entity,id,data) VALUES($1,$2,$3)', ['system_migrations',migrationId,JSON.stringify({description:'Initial admin access reset V4',applied_at:now()})]);
+    console.log('Acceso inicial de administrador preparado. Es obligatorio cambiar la contraseña tras ingresar.');
+   }
+   await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
  }
  const cfg=await query("SELECT 1 FROM records WHERE entity='company' LIMIT 1");
  if(!cfg.rowCount){const id=uuid();let company={id,name:'GLEDITECH',ruc:'',address:'',phone:'',email:'',city:'Quito',terms:''};await putRecord('company',id,company);}
