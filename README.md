@@ -54,3 +54,28 @@ La función «Olvidé mi contraseña» informa que hay que contactar al administ
 6. Verificar cálculos y flujos operativos contra la aplicación original antes de utilizar documentos comerciales reales.
 
 > Se verificó la sintaxis de `server.js`, el JavaScript incluido en `public/index.html` y la estructura YAML de `render.yaml`. No fue posible ejecutar una instalación completa de dependencias ni conectarse a una base PostgreSQL de Render desde este entorno; el despliegue y las pruebas de integración deben confirmarse en Render.
+
+
+## Solución del error ECONNREFUSED 127.0.0.1:5432 en Render
+
+Este error significa que la aplicación intenta conectarse a PostgreSQL en el propio contenedor web. En Render, la base de datos es un servicio separado: no uses `localhost`, `127.0.0.1` ni `::1`.
+
+### Si despliegas con Blueprint (`render.yaml`)
+1. En Render, crea o actualiza el Blueprint desde el repositorio que contiene `render.yaml`.
+2. Asegúrate de que se cree el recurso PostgreSQL `gleditech-db`.
+3. Asegúrate de que el servicio web `gleditech` tenga `DATABASE_URL` vinculada a `gleditech-db` mediante `fromDatabase` (ya está declarada en `render.yaml`).
+4. Si Render solicita `ADMIN_PASSWORD`, introduce una contraseña única de al menos 12 caracteres.
+5. Guarda los cambios y ejecuta un nuevo deploy.
+
+### Si creaste el servicio web manualmente (sin Blueprint)
+1. Abre el servicio PostgreSQL de GLEDITECH en Render.
+2. Copia **Internal Database URL** (no External Database URL).
+3. Abre el servicio web `gleditech` → **Environment**.
+4. Crea o actualiza `DATABASE_URL` y pega la Internal Database URL completa.
+5. Guarda y realiza **Manual Deploy → Deploy latest commit**.
+
+### Comprobación
+- `DATABASE_URL` debe existir y su host no debe ser `localhost`, `127.0.0.1` ni `::1`.
+- La base PostgreSQL y el servicio web deben estar en la misma región para usar la URL interna.
+- No publiques ni compartas el valor de `DATABASE_URL`, porque contiene credenciales.
+- El servidor ahora se detiene con un mensaje claro si `DATABASE_URL` falta o apunta a localhost.

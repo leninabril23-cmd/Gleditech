@@ -12,7 +12,27 @@ import {fileURLToPath} from 'node:url';
 const {Pool}=pg;
 const app=express();
 const dir=path.dirname(fileURLToPath(import.meta.url));
-const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL?.includes('localhost')?false:{rejectUnauthorized:false}});
+const databaseUrl=String(process.env.DATABASE_URL||'').trim();
+if(!databaseUrl){
+ console.error('CONFIGURACIÓN INCOMPLETA: falta DATABASE_URL. En Render, vincula una base PostgreSQL al servicio web y configura DATABASE_URL con su Internal Database URL.');
+ process.exit(1);
+}
+let databaseHost='';
+try{databaseHost=new URL(databaseUrl).hostname;}catch{
+ console.error('CONFIGURACIÓN INVÁLIDA: DATABASE_URL no tiene un formato PostgreSQL válido.');
+ process.exit(1);
+}
+if(['localhost','127.0.0.1','::1'].includes(databaseHost)){
+ console.error('CONFIGURACIÓN INVÁLIDA: DATABASE_URL apunta a localhost. Render necesita la Internal Database URL de tu servicio PostgreSQL, no 127.0.0.1.');
+ process.exit(1);
+}
+const pool=new Pool({
+ connectionString:databaseUrl,
+ ssl:process.env.NODE_ENV==='production'?{rejectUnauthorized:false}:undefined,
+ connectionTimeoutMillis:10000,
+ idleTimeoutMillis:30000,
+ max:10
+});
 const uuid=()=>crypto.randomUUID();
 const now=()=>new Date().toISOString();
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
